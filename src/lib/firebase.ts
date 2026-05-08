@@ -1,6 +1,9 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, signInAnonymously, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { isFirebaseConfigured } from '@/lib/firebaseConfigured';
+
+export { isFirebaseConfigured };
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,10 +15,6 @@ const config = {
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
-
-export function isFirebaseConfigured(): boolean {
-  return Boolean(config.apiKey && config.projectId && config.appId);
-}
 
 interface FirebaseHandles {
   app: FirebaseApp;

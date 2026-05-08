@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { isFirebaseConfigured } from '@/lib/firebase';
+import { isFirebaseConfigured } from '@/lib/firebaseConfigured';
 import { listOwnedBrackets, type OwnedBracketEntry } from '@/lib/localStore';
 
 export function Home() {
