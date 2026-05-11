@@ -1,0 +1,29 @@
+name: Poll ESPN scores
+
+on:
+  schedule:
+    # Every 30 minutes. The script itself exits early outside the
+    # tournament window (2026-06-11 → 2026-07-20).
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: poll-espn
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm install --no-audit --no-fund
+      - run: npm run poll-espn
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
