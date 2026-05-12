@@ -4,13 +4,14 @@ import { ensureSignedIn, isFirebaseConfigured } from '@/lib/firebase';
 import { subscribeToPoolBracketsFull } from '@/lib/bracketApi';
 import { getPool } from '@/lib/poolApi';
 import { subscribeResults } from '@/lib/resultsApi';
-import { MAX_SCORE, scoreBracket } from '@/lib/scoring';
+import { MAX_SCORE, maxAttainable, scoreBracket } from '@/lib/scoring';
 import { getOwnedBracket } from '@/lib/localStore';
 import type { Bracket, Pool, ResultsDoc } from '@/lib/types';
 
 interface LeaderboardRow {
   bracket: Bracket;
   score: number | null;
+  max: number;
 }
 
 export function PoolView() {
@@ -58,12 +59,12 @@ export function PoolView() {
     const list = brackets.map((b): LeaderboardRow => ({
       bracket: b,
       score: results ? scoreBracket(b.picks, results.picks).total : null,
+      max: results ? maxAttainable(b.picks, results.picks) : MAX_SCORE,
     }));
-    if (results) {
-      list.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.bracket.nickname.localeCompare(b.bracket.nickname));
-    } else {
-      list.sort((a, b) => a.bracket.nickname.localeCompare(b.bracket.nickname));
-    }
+    list.sort(
+      (a, b) =>
+        (b.score ?? 0) - (a.score ?? 0) || a.bracket.nickname.localeCompare(b.bracket.nickname),
+    );
     return list;
   }, [brackets, results]);
 
@@ -143,14 +144,20 @@ export function PoolView() {
                       )}
                     </span>
                     <span className="flex items-center gap-3 text-xs text-muted">
-                      {hasResults ? (
-                        <span className="font-mono text-base font-semibold text-text">
-                          {row.score ?? 0}
+                      {hasResults && (
+                        <span className="font-mono">
+                          <span className="text-base font-semibold text-text">
+                            {row.score ?? 0}
+                          </span>
+                          <span className="text-muted"> / {row.max}</span>
                         </span>
-                      ) : m.finalizedAt ? (
-                        <span className="text-accent">submitted</span>
-                      ) : (
-                        'in progress'
+                      )}
+                      {!hasResults && (
+                        m.finalizedAt ? (
+                          <span className="text-accent">submitted</span>
+                        ) : (
+                          'in progress'
+                        )
                       )}
                     </span>
                   </Link>

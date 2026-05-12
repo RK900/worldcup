@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ensureSignedIn, isFirebaseConfigured } from '@/lib/firebase';
 import { getBracket, updateBracketPicks, verifyBracketToken } from '@/lib/bracketApi';
 import { getPool } from '@/lib/poolApi';
 import { formatDeadline, isPastDeadline } from '@/lib/deadline';
+import { subscribeResults } from '@/lib/resultsApi';
+import { MAX_SCORE, maxAttainable, scoreBracket } from '@/lib/scoring';
 import { useBracketStore } from '@/store/bracketStore';
 import { BracketEditor } from '@/components/bracket/BracketEditor';
 import { BracketViewer } from '@/components/bracket/BracketViewer';
 import { FinalizeBar } from '@/components/bracket/FinalizeBar';
-import type { Bracket, Pool } from '@/lib/types';
+import type { Bracket, BracketPicks, Pool, ResultsDoc } from '@/lib/types';
 
 const SAVE_DEBOUNCE_MS = 1000;
 
@@ -19,6 +21,7 @@ export function BracketEdit() {
 
   const [pool, setPool] = useState<Pool | null>(null);
   const [bracket, setBracket] = useState<Bracket | null>(null);
+  const [results, setResults] = useState<ResultsDoc | null>(null);
   const [editable, setEditable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +29,11 @@ export function BracketEdit() {
 
   const picks = useBracketStore((s) => s.picks);
   const initialLoadDone = useRef(false);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return;
+    return subscribeResults(setResults);
+  }, []);
 
   useEffect(() => {
     if (!poolId || !bracketId) return;
@@ -85,6 +93,18 @@ export function BracketEdit() {
     return () => clearTimeout(t);
   }, [picks, editable, bracket]);
 
+  // Picks to score against — the live in-progress picks if editing, the
+  // saved bracket picks if read-only.
+  const livePicks: BracketPicks | null = editable ? picks : bracket?.picks ?? null;
+  const score = useMemo(() => {
+    if (!livePicks) return null;
+    if (!results) return { current: 0, max: MAX_SCORE };
+    return {
+      current: scoreBracket(livePicks, results.picks).total,
+      max: maxAttainable(livePicks, results.picks),
+    };
+  }, [livePicks, results]);
+
   if (loading) return <div className="text-muted">Loading bracket…</div>;
   if (error)
     return <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>;
@@ -101,7 +121,10 @@ export function BracketEdit() {
         header={
           <header className="space-y-2">
             <PoolChip poolId={pool.id} poolName={pool.name} />
-            <h1 className="text-2xl font-semibold">{bracket.nickname}&rsquo;s bracket</h1>
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h1 className="text-2xl font-semibold">{bracket.nickname}&rsquo;s bracket</h1>
+              {score && <ScoreBadge current={score.current} max={score.max} />}
+            </div>
             <p className="text-sm text-muted">
               {submittedDate ? (
                 <span className="text-accent">submitted {submittedDate}</span>
@@ -132,7 +155,10 @@ export function BracketEdit() {
             <PoolChip poolId={pool.id} poolName={pool.name} />
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <h1 className="text-xl font-semibold">{bracket.nickname}&rsquo;s bracket</h1>
-              <SaveIndicator status={saveStatus} />
+              <div className="flex items-center gap-3">
+                {score && <ScoreBadge current={score.current} max={score.max} />}
+                <SaveIndicator status={saveStatus} />
+              </div>
             </div>
             {editLinkUrl && <CopyEditLink url={editLinkUrl} />}
           </header>
@@ -177,6 +203,19 @@ function SaveIndicator({ status }: { status: 'idle' | 'saving' | 'saved' | 'erro
   const colorClass =
     status === 'error' ? 'text-danger' : status === 'saved' ? 'text-accent' : 'text-muted';
   return <span className={`text-xs ${colorClass}`}>{text}</span>;
+}
+
+function ScoreBadge({ current, max }: { current: number; max: number }) {
+  return (
+    <div
+      className="inline-flex items-baseline gap-1.5 rounded-md border border-border bg-surface-2 px-3 py-1.5"
+      title={`${current} earned, max attainable ${max}. Max drops as your picks are eliminated.`}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-widest text-muted">Score</span>
+      <span className="font-mono text-base font-semibold text-text">{current}</span>
+      <span className="font-mono text-xs text-muted">/ {max}</span>
+    </div>
+  );
 }
 
 function PoolChip({ poolId, poolName }: { poolId: string; poolName: string }) {
