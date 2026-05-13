@@ -107,6 +107,12 @@ export function PoolView() {
             </Link>
           )}
           <CopyJoinLink url={joinUrl} />
+          <Link
+            to="/scoring"
+            className="rounded-md border border-border bg-surface-2 px-4 py-2 text-sm font-medium hover:border-accent/40"
+          >
+            How scoring works
+          </Link>
         </div>
       </header>
 

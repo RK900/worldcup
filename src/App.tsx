@@ -22,6 +22,9 @@ const BracketEdit = lazy(() =>
 const Admin = lazy(() =>
   import('@/routes/Admin').then((m) => ({ default: m.Admin })),
 );
+const Scoring = lazy(() =>
+  import('@/routes/Scoring').then((m) => ({ default: m.Scoring })),
+);
 
 function RouteFallback() {
   return <div className="text-muted">Loading…</div>;
@@ -70,6 +73,14 @@ export default function App() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <Admin />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/scoring"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <Scoring />
             </Suspense>
           }
         />
