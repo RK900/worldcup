@@ -14,22 +14,41 @@ describe('scoreBracket', () => {
     expect(scoreBracket(blankPicks(), blankPicks()).total).toBe(0);
   });
 
-  it('awards 4 group points for a perfectly-predicted group', () => {
+  it('awards 8 group points for a perfectly-predicted group (Option C)', () => {
     const picks = blankPicks();
     const results = blankPicks();
     picks.groups.A.order = ['MEX', 'RSA', 'KOR', 'CZE'];
     results.groups.A.order = ['MEX', 'RSA', 'KOR', 'CZE'];
     const score = scoreBracket(picks, results);
-    expect(score.groupPoints).toBe(4);
-    expect(score.total).toBe(4);
+    expect(score.groupPoints).toBe(8);
+    expect(score.total).toBe(8);
   });
 
-  it('awards only matching positions when group order partially right', () => {
+  it('awards 2 exact + 2 off-by-1 = 6 pts when middle two are swapped', () => {
     const picks = blankPicks();
     const results = blankPicks();
     picks.groups.A.order = ['MEX', 'KOR', 'RSA', 'CZE'];
     results.groups.A.order = ['MEX', 'RSA', 'KOR', 'CZE'];
-    expect(scoreBracket(picks, results).groupPoints).toBe(2); // 1st + 4th
+    // MEX/CZE exact (2 pts each) + KOR/RSA off-by-1 (1 pt each) = 6
+    expect(scoreBracket(picks, results).groupPoints).toBe(6);
+  });
+
+  it('awards 0 pts when predicted top half and bottom half are fully swapped', () => {
+    const picks = blankPicks();
+    const results = blankPicks();
+    picks.groups.A.order = ['MEX', 'RSA', 'KOR', 'CZE'];
+    // Pred [MEX, RSA, KOR, CZE] vs actual [KOR, CZE, MEX, RSA] — each team is 2 off.
+    results.groups.A.order = ['KOR', 'CZE', 'MEX', 'RSA'];
+    expect(scoreBracket(picks, results).groupPoints).toBe(0);
+  });
+
+  it('awards 4 pts when both pairs are swapped (all off-by-1)', () => {
+    const picks = blankPicks();
+    const results = blankPicks();
+    picks.groups.A.order = ['MEX', 'RSA', 'KOR', 'CZE'];
+    results.groups.A.order = ['RSA', 'MEX', 'CZE', 'KOR'];
+    // All four off by 1 → 1 pt × 4 = 4
+    expect(scoreBracket(picks, results).groupPoints).toBe(4);
   });
 
   it('awards points for each correctly identified third-place advancer', () => {
@@ -40,20 +59,20 @@ describe('scoreBracket', () => {
     expect(scoreBracket(picks, results).thirdPlacePoints).toBe(2);
   });
 
-  it('awards round-weighted points for correct knockout winners', () => {
+  it('awards round-weighted points for correct knockout winners (KO doubled)', () => {
     const picks = blankPicks();
     const results = blankPicks();
-    // R32 (1pt): match 73
+    // R32 (2pts): match 73
     picks.knockout[73] = { winner: 'MEX' };
     results.knockout[73] = { winner: 'MEX' };
-    // Final (16pt): match 104
+    // Final (32pts): match 104
     picks.knockout[104] = { winner: 'BRA' };
     results.knockout[104] = { winner: 'BRA' };
     const score = scoreBracket(picks, results);
-    expect(score.knockoutPointsByRound.R32).toBe(1);
-    expect(score.knockoutPointsByRound.F).toBe(16);
-    expect(score.knockoutTotal).toBe(17);
-    expect(score.total).toBe(17);
+    expect(score.knockoutPointsByRound.R32).toBe(2);
+    expect(score.knockoutPointsByRound.F).toBe(32);
+    expect(score.knockoutTotal).toBe(34);
+    expect(score.total).toBe(34);
   });
 
   it('gives 0 for a knockout pick when results have no winner yet', () => {
@@ -84,14 +103,15 @@ describe('scoreBracket', () => {
     expect(score.total).toBe(MAX_SCORE);
   });
 
-  it('MAX_SCORE matches manual calculation', () => {
+  it('MAX_SCORE matches manual calculation (280 with KO×2 + Option C groups)', () => {
     let expected = 0;
     for (const round of Object.keys(ROUND_POINTS) as Round[]) {
       expected += (MATCHES_BY_ROUND[round]?.length ?? 0) * ROUND_POINTS[round];
     }
-    expected += GROUP_LETTERS.length * 4; // group points
-    expected += 8; // third-place points
+    expected += GROUP_LETTERS.length * 4 * 2; // group placement: 4 slots × 2 pts each
+    expected += 8; // best-3 advancer pts
     expect(MAX_SCORE).toBe(expected);
+    expect(MAX_SCORE).toBe(280);
   });
 });
 
@@ -146,9 +166,9 @@ describe('maxAttainable', () => {
   it('keeps a KO pick in max if their team is still alive', () => {
     const picks = blankPicks();
     const results = blankPicks();
-    picks.knockout[104] = { winner: 'BRA' }; // Final, 16 pts
+    picks.knockout[104] = { winner: 'BRA' }; // Final, 32 pts
     // No matches scored yet — BRA is alive trivially.
-    expect(maxAttainable(picks, results)).toBe(16);
+    expect(maxAttainable(picks, results)).toBe(32);
   });
 
   it('locks group points into current and removes them from remaining', () => {
@@ -156,7 +176,7 @@ describe('maxAttainable', () => {
     const results = blankPicks();
     picks.groups.A.order = ['MEX', 'RSA', 'KOR', 'CZE'];
     results.groups.A.order = ['MEX', 'RSA', 'KOR', 'CZE'];
-    // Group A is fully scored → contributes 4 to current, 0 to remaining.
-    expect(maxAttainable(picks, results)).toBe(4);
+    // Group A is fully scored → contributes 8 to current, 0 to remaining.
+    expect(maxAttainable(picks, results)).toBe(8);
   });
 });

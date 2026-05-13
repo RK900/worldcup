@@ -5,20 +5,25 @@ import { resolveSlot } from '@/lib/resolveBracket';
 import { mapThirdPlaceAdvancers } from '@/lib/thirdPlaceMap';
 import type { BracketPicks, GroupLetter, Round, TeamCode } from '@/lib/types';
 
-// Round point weights. Doubling per knockout round; 3rd-place sits at SF
-// value (consolation match, meaningful but not the Final).
+// Round point weights — doubling per knockout round; 3rd-place sits at SF
+// value (consolation match, meaningful but not the Final). Each weight is
+// 2× the original to push more of the total toward the knockouts.
 export const ROUND_POINTS: Record<Round, number> = {
-  R32: 1,
-  R16: 2,
-  QF: 4,
-  SF: 8,
-  '3rd': 8,
-  F: 16,
+  R32: 2,
+  R16: 4,
+  QF: 8,
+  SF: 16,
+  '3rd': 16,
+  F: 32,
 };
 
-// Per-position group point. 1 point for each exact rank match (1st in 1st,
-// 2nd in 2nd, etc). 4 possible per group, 48 max across all 12 groups.
-export const GROUP_POSITION_POINTS = 1;
+// Tiered group placement scoring (Option C):
+//   - Exact match (predicted team is in its actual finishing slot): 2 pts
+//   - Off by one slot:                                                1 pt
+//   - Off by two or more slots:                                       0 pts
+// Max per group = 4 slots × 2 = 8. Max across 12 groups = 96.
+export const GROUP_POSITION_EXACT_POINTS = 2;
+export const GROUP_POSITION_NEAR_POINTS = 1;
 
 // 1 point per correctly identified advancing third-place group. 8 max.
 export const THIRD_PLACE_GROUP_POINTS = 1;
@@ -85,9 +90,16 @@ function scoreGroup(
   if (!p || !r) return 0;
   let pts = 0;
   for (let i = 0; i < 4; i++) {
-    if (p[i] !== null && r[i] !== null && p[i] === r[i]) {
-      pts += GROUP_POSITION_POINTS;
-    }
+    const predicted = p[i];
+    if (!predicted) continue;
+    // Find where the predicted team actually finished. indexOf returns -1
+    // if the team isn't in this group's actual order (e.g., results not
+    // yet entered for this group).
+    const actualPos = r.indexOf(predicted);
+    if (actualPos === -1) continue;
+    const distance = Math.abs(i - actualPos);
+    if (distance === 0) pts += GROUP_POSITION_EXACT_POINTS;
+    else if (distance === 1) pts += GROUP_POSITION_NEAR_POINTS;
   }
   return pts;
 }
@@ -108,7 +120,7 @@ export const MAX_SCORE: number = (() => {
   for (const round of Object.keys(ROUND_POINTS) as Round[]) {
     knockout += (MATCHES_BY_ROUND[round]?.length ?? 0) * ROUND_POINTS[round];
   }
-  const groups = GROUP_LETTERS.length * 4 * GROUP_POSITION_POINTS;
+  const groups = GROUP_LETTERS.length * 4 * GROUP_POSITION_EXACT_POINTS;
   const thirds = 8 * THIRD_PLACE_GROUP_POINTS;
   return knockout + groups + thirds;
 })();
@@ -168,13 +180,14 @@ export function maxAttainable(picks: BracketPicks, results: BracketPicks): numbe
   const current = scoreBracket(picks, results).total;
   let remaining = 0;
 
-  // Group placements.
+  // Group placements — each unscored slot the user picked could earn the
+  // exact-match max.
   for (const letter of GROUP_LETTERS) {
     const resultOrder = results.groups[letter]?.order ?? [null, null, null, null];
     const myOrder = picks.groups[letter]?.order ?? [null, null, null, null];
     for (let i = 0; i < 4; i++) {
       if (resultOrder[i] === null && myOrder[i] !== null) {
-        remaining += GROUP_POSITION_POINTS;
+        remaining += GROUP_POSITION_EXACT_POINTS;
       }
     }
   }
