@@ -1,21 +1,16 @@
 import { BEST3_SLOT_MATCH_IDS, MATCHES_BY_ID } from '@/data/bracket';
+import { THIRD_PLACE_TABLE } from '@/data/thirdPlaceTable';
 import type { ThirdPlaceMapping } from '@/lib/resolveBracket';
 import type { GroupLetter } from '@/lib/types';
 
 // Map the user's chosen advancing third-place groups (up to 8) to the 8 Best3 slots
-// in the R32 bracket. Each slot has an `eligibleGroups` constraint per FIFA's bracket;
-// for any 8-of-12 selection, FIFA's published table guarantees a unique perfect matching.
+// in the R32 bracket.
 //
-// We compute that matching via deterministic backtracking:
-//  - Walk slots in ascending slotIndex (FIFA match order).
-//  - Within each slot, try advancing groups in ascending letter order.
-//  - First solution that fills the maximum possible slots wins.
-//
-// For partial selections (< 8) we return the best partial matching;
-// any group that couldn't be placed is reported in `unmatched`.
-//
-// This algorithm is provably equivalent to FIFA's lookup when a perfect matching exists.
-// If FIFA's published table is later located, swap this implementation in place.
+// For full 8-group selections we use FIFA's official Annex C lookup table
+// (mirrored at src/data/thirdPlaceTable.ts from the Wikipedia template).
+// For partial selections (< 8 groups, while the user is still filling in)
+// we fall back to deterministic backtracking matching so the UI shows
+// reasonable preview slots as the user picks.
 
 interface SlotInfo {
   slotIndex: number;
@@ -31,18 +26,44 @@ const SLOT_INFOS: SlotInfo[] = BEST3_SLOT_MATCH_IDS.map((matchId, idx) => {
   return { slotIndex: idx, matchId, eligibleGroups: m.away.eligibleGroups };
 });
 
+function tableKey(groups: GroupLetter[]): string {
+  return [...new Set(groups)].sort().join('');
+}
+
 export function mapThirdPlaceAdvancers(advancingGroups: GroupLetter[]): ThirdPlaceMapping {
   const groups = [...new Set(advancingGroups)].sort();
-  const N = SLOT_INFOS.length;
-  const M = groups.length;
 
-  if (M === 0) {
+  if (groups.length === 0) {
     return {
       slots: SLOT_INFOS.map((s) => ({ matchId: s.matchId, group: null })),
       unmatched: [],
     };
   }
 
+  // Exactly 8 → official FIFA Annex C table.
+  if (groups.length === 8) {
+    const assignment = THIRD_PLACE_TABLE[tableKey(groups)];
+    if (assignment) {
+      return {
+        slots: SLOT_INFOS.map((s, i) => ({
+          matchId: s.matchId,
+          group: assignment[i] ?? null,
+        })),
+        unmatched: [],
+      };
+    }
+    // Fall through to matching if the lookup somehow misses (shouldn't
+    // happen for valid 8-of-12 selections, but defensive).
+  }
+
+  // Partial selection (or unexpected miss): deterministic best-effort
+  // matching so the UI can preview slots while the user is picking.
+  return matchByBacktracking(groups as GroupLetter[]);
+}
+
+function matchByBacktracking(groups: GroupLetter[]): ThirdPlaceMapping {
+  const N = SLOT_INFOS.length;
+  const M = groups.length;
   const work: (GroupLetter | null)[] = new Array(N).fill(null);
   const used: boolean[] = new Array(M).fill(false);
   let best: (GroupLetter | null)[] = [...work];

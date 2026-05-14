@@ -53,6 +53,24 @@ describe('mapThirdPlaceAdvancers', () => {
     }
   });
 
+  it('uses FIFA Annex C assignments (every slot respects eligibleGroups for all 495 combos)', () => {
+    const allCombinations = combinations(ALL_GROUPS, 8);
+    for (const combo of allCombinations) {
+      const r = mapThirdPlaceAdvancers(combo);
+      r.slots.forEach((slot) => {
+        const m = MATCHES_BY_ID[slot.matchId];
+        if (m.away.kind === 'best3' && slot.group) {
+          if (!m.away.eligibleGroups.includes(slot.group)) {
+            throw new Error(
+              `Combo ${combo.join('')}: slot ${slot.matchId} assigned group ${slot.group}, ` +
+                `which is not in eligibleGroups [${m.away.eligibleGroups.join(',')}]`,
+            );
+          }
+        }
+      });
+    }
+  });
+
   it('respects eligibility constraints for any 8 groups', () => {
     const r = mapThirdPlaceAdvancers(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
     r.slots.forEach((slot) => {
